@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     # Database
-    database_url: str = "postgresql+asyncpg://music_corn:music_corn@localhost:5432/music_corn"
+    database_url: str = "postgresql+asyncpg://music_corn:music_corn@localhost:5433/music_corn"
 
     # Anthropic
     anthropic_api_key: str = ""

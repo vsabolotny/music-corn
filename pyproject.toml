@@ -19,6 +19,9 @@ dependencies = [
     "pydub>=0.25",
     "structlog>=24.4",
     "apscheduler>=3.10,<4.0",
+    "yt-dlp>=2024.0",
+    "spotipy>=2.24",
+    "psycopg2-binary>=2.9.11",
 ]
 
 [project.optional-dependencies]

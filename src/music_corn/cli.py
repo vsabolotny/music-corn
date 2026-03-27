@@ -96,6 +96,24 @@ def list_sources():
 
 
 @app.command()
+def extract():
+    """Run LLM extraction on unanalyzed content items."""
+    from music_corn.extraction.extractor import extract_all_unanalyzed
+
+    total = asyncio.run(extract_all_unanalyzed())
+    typer.echo(f"Extracted {total} music mentions.")
+
+
+@app.command()
+def resolve():
+    """Resolve unresolved music mentions to Spotify track IDs."""
+    from music_corn.extraction.spotify_resolver import resolve_all_unresolved
+
+    resolved = asyncio.run(resolve_all_unresolved())
+    typer.echo(f"Resolved {resolved} mentions to Spotify tracks.")
+
+
+@app.command()
 def migrate():
     """Run database migrations."""
     import subprocess
