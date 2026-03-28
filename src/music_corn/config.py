@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     spotify_client_id: str = ""
     spotify_client_secret: str = ""
     spotify_redirect_uri: str = "http://127.0.0.1:8888/callback"
+    spotify_console_token: str = ""  # Token from developer.spotify.com console (full API access)
 
     # Podcast generation
     tts_voice: str = "nova"
