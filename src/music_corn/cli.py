@@ -381,6 +381,104 @@ def scheduler():
     start_scheduler()
 
 
+# --- Discover sub-commands ---
+
+discover_app = typer.Typer(name="discover", help="Search and discover music podcasts.")
+app.add_typer(discover_app)
+
+
+@discover_app.command("search")
+def discover_search(
+    query: str = typer.Option("music", help="Search query"),
+    genre: str | None = typer.Option(None, help="Genre filter (jazz, rock, electronic, etc.)"),
+    country: str | None = typer.Option(None, help="Country code (DE, US, GB, etc.)"),
+    year: int | None = typer.Option(None, help="Year filter"),
+    language: str | None = typer.Option(None, help="Language code (de, en, etc.)"),
+    limit: int = typer.Option(20, help="Max results"),
+):
+    """Search for music podcasts across PodcastIndex and ListenNotes."""
+    from music_corn.discovery.models import SearchFilters
+    from music_corn.discovery.service import search_podcasts, persist_results
+    from music_corn.discovery.ranking import compute_quality_rank
+
+    filters = SearchFilters(
+        query=query, genre=genre, country=country,
+        language=language, year=year, limit=limit,
+    )
+
+    async def _run():
+        results = await search_podcasts(filters)
+        if not results:
+            typer.echo("No podcasts found.")
+            return
+
+        # Persist to DB
+        query_str = f"{query} genre={genre} country={country} year={year}"
+        await persist_results(results, query_str)
+
+        # Display
+        typer.echo(f"\n{'#':>3}  {'Rank':>5}  {'Title':<35} {'Genre':<18} {'Country':>7}  {'Eps':>5}")
+        typer.echo("-" * 90)
+        for i, p in enumerate(results, 1):
+            rank = p.raw_data.get("quality_rank", compute_quality_rank(p))
+            genres_str = ", ".join(p.genres[:2]) if p.genres else "-"
+            country_str = p.country or "?"
+            eps = str(p.episode_count) if p.episode_count else "?"
+            title = p.title[:34]
+            typer.echo(f"{i:>3}  {rank:>5.2f}  {title:<35} {genres_str:<18} {country_str:>7}  {eps:>5}")
+
+        typer.echo(f"\n{len(results)} results saved. Use 'discover add <title>' to add as source.")
+
+    asyncio.run(_run())
+
+
+@discover_app.command("list")
+def discover_list(
+    min_rank: float = typer.Option(0.0, help="Minimum quality rank (0.0-1.0)"),
+    genre: str | None = typer.Option(None, help="Filter by genre"),
+    limit: int = typer.Option(50, help="Max results"),
+):
+    """List previously discovered podcasts from the database."""
+    from music_corn.discovery.service import list_discovered
+
+    async def _run():
+        results = await list_discovered(min_rank=min_rank, genre=genre, limit=limit)
+        if not results:
+            typer.echo("No discovered podcasts. Run 'discover search' first.")
+            return
+
+        typer.echo(f"\n{'#':>3}  {'Rank':>5}  {'Title':<35} {'Genre':<18} {'Country':>7}  {'Status':<10}")
+        typer.echo("-" * 95)
+        for i, p in enumerate(results, 1):
+            genres_str = ", ".join(p.genres[:2]) if p.genres else "-"
+            country_str = p.country or "?"
+            title = p.title[:34]
+            status = "added" if p.promoted_source_id else "available"
+            typer.echo(f"{i:>3}  {p.quality_rank:>5.2f}  {title:<35} {genres_str:<18} {country_str:>7}  {status:<10}")
+
+    asyncio.run(_run())
+
+
+@discover_app.command("add")
+def discover_add(
+    title: str = typer.Argument(help="Podcast title (or part of it) to promote to a source"),
+):
+    """Add a discovered podcast as an active source for ingestion."""
+    from music_corn.discovery.service import promote_to_source
+
+    async def _run():
+        source = await promote_to_source(title=title)
+        if not source:
+            typer.echo(f"Podcast matching '{title}' not found. Run 'discover search' first.")
+            raise typer.Exit(1)
+        typer.echo(f"Added source: {source.name} ({source.plugin_type}) -> {source.url}")
+        typer.echo("Run 'music-corn ingest' to fetch episodes.")
+
+    asyncio.run(_run())
+
+
+# --- Utility commands ---
+
 @app.command()
 def migrate():
     """Run database migrations."""

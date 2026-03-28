@@ -144,3 +144,40 @@ class DigestTrack(Base):
 
     digest: Mapped["WeeklyDigest"] = relationship(back_populates="digest_tracks")
     music_mention: Mapped["MusicMention"] = relationship()
+
+
+class DiscoveredPodcast(Base):
+    __tablename__ = "discovered_podcasts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    author: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    feed_url: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    website_url: Mapped[str | None] = mapped_column(Text)
+    image_url: Mapped[str | None] = mapped_column(Text)
+    language: Mapped[str | None] = mapped_column(Text)
+    country: Mapped[str | None] = mapped_column(Text)
+    genres: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    episode_count: Mapped[int | None] = mapped_column(Integer)
+    latest_episode_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Quality signals
+    listen_score: Mapped[float | None] = mapped_column(Float)
+    itunes_rating: Mapped[float | None] = mapped_column(Float)
+    itunes_review_count: Mapped[int | None] = mapped_column(Integer)
+    podcastindex_trending: Mapped[float | None] = mapped_column(Float)
+    quality_rank: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    # Lifecycle
+    discovered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    search_query: Mapped[str | None] = mapped_column(Text)
+    api_sources: Mapped[dict] = mapped_column(JSONB, default=dict)
+    promoted_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("sources.id")
+    )
