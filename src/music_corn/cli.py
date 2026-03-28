@@ -151,6 +151,31 @@ def taste(
 
 
 @app.command()
+def recommend(
+    email: str = typer.Option("default", help="User email/identifier"),
+    count: int = typer.Option(15, help="Number of tracks to recommend"),
+    discovery: float = typer.Option(0.5, help="Discovery dial: 0.0=safe, 1.0=adventurous"),
+):
+    """Generate personalized music recommendations."""
+    from music_corn.recommendation.engine import generate_recommendations
+
+    digest = asyncio.run(generate_recommendations(email, count, discovery))
+    if not digest:
+        typer.echo("Could not generate recommendations. Run 'extract', 'resolve', and 'taste' first.")
+        raise typer.Exit(1)
+
+    typer.echo(f"\nWeekly Recommendations (digest: {digest.id})")
+    typer.echo(f"{'#':>3}  {'Artist':<25} {'Track':<35} {'Score':>5}  Reason")
+    typer.echo("-" * 100)
+    for i, track in enumerate(digest.track_list, 1):
+        artist = track.get("artist", "?")[:24]
+        title = (track.get("track") or "?")[:34]
+        score = track.get("score", 0)
+        reason = track.get("reason", "")[:30]
+        typer.echo(f"{i:>3}  {artist:<25} {title:<35} {score:>5.3f}  {reason}")
+
+
+@app.command()
 def migrate():
     """Run database migrations."""
     import subprocess
