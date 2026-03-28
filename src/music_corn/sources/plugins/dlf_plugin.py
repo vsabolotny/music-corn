@@ -94,73 +94,28 @@ def _download_hls_to_mp3(hls_url: str, output_path: str, max_duration: int = 0) 
 
 
 def _transcribe_audio(audio_path: str) -> str:
-    """Transcribe an audio file using OpenAI Whisper API.
+    """Transcribe an audio file using local faster-whisper.
 
-    Handles files larger than 25MB by splitting into chunks.
+    Free, runs locally, no API key needed. Uses the 'base' model by default
+    for speed; can be upgraded to 'medium' or 'large-v3' for better accuracy.
     """
+    from faster_whisper import WhisperModel
+
     file_size = os.path.getsize(audio_path)
-    max_size = 24 * 1024 * 1024  # 24MB to be safe (limit is 25MB)
+    logger.info("Transcribing audio locally", size_mb=round(file_size / 1024 / 1024, 1))
 
-    if file_size <= max_size:
-        return _whisper_api_call(audio_path)
+    model = WhisperModel("base", compute_type="int8")
+    segments, info = model.transcribe(audio_path, language="de", beam_size=5)
 
-    # Split into chunks for large files
-    logger.info("Audio too large, splitting", size_mb=round(file_size / 1024 / 1024, 1))
-    return _transcribe_chunked(audio_path)
+    logger.info("Detected language", language=info.language, probability=round(info.language_probability, 2))
 
+    transcript_parts = []
+    for segment in segments:
+        transcript_parts.append(segment.text.strip())
 
-def _whisper_api_call(audio_path: str) -> str:
-    """Call OpenAI Whisper API for a single audio file."""
-    with httpx.Client(timeout=300) as client:
-        with open(audio_path, "rb") as f:
-            response = client.post(
-                "https://api.openai.com/v1/audio/transcriptions",
-                headers={"Authorization": f"Bearer {settings.openai_api_key}"},
-                files={"file": ("audio.mp3", f, "audio/mpeg")},
-                data={
-                    "model": "whisper-1",
-                    "language": "de",
-                    "response_format": "text",
-                },
-            )
-            response.raise_for_status()
-            return response.text
-
-
-def _transcribe_chunked(audio_path: str) -> str:
-    """Split audio into 10-minute chunks and transcribe each."""
-    chunk_duration = 600  # 10 minutes
-    transcripts = []
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Get total duration
-        probe = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", audio_path],
-            capture_output=True, text=True,
-        )
-        total_duration = float(probe.stdout.strip()) if probe.stdout.strip() else 3600
-
-        offset = 0
-        chunk_idx = 0
-        while offset < total_duration:
-            chunk_path = os.path.join(tmpdir, f"chunk_{chunk_idx:03d}.mp3")
-            cmd = [
-                "ffmpeg", "-y", "-i", audio_path,
-                "-ss", str(offset), "-t", str(chunk_duration),
-                "-acodec", "libmp3lame", "-ab", "64k",
-                "-ar", "16000", "-ac", "1",
-                chunk_path,
-            ]
-            subprocess.run(cmd, capture_output=True, timeout=120)
-
-            if os.path.exists(chunk_path) and os.path.getsize(chunk_path) > 0:
-                logger.info("Transcribing chunk", chunk=chunk_idx, offset=offset)
-                text = _whisper_api_call(chunk_path)
-                transcripts.append(text)
-
-            offset += chunk_duration
-            chunk_idx += 1
+    transcript = " ".join(transcript_parts)
+    logger.info("Transcription complete", length=len(transcript))
+    return transcript
 
     return " ".join(transcripts)
 

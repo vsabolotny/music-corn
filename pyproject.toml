@@ -24,6 +24,7 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "fastapi>=0.115",
     "uvicorn>=0.34",
+    "faster-whisper>=1.2.1",
 ]
 
 [project.optional-dependencies]
