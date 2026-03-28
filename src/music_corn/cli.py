@@ -16,6 +16,7 @@ structlog.configure(
 # Import plugins so they self-register
 import music_corn.sources.plugins.rss_plugin  # noqa: F401
 import music_corn.sources.plugins.youtube_plugin  # noqa: F401
+import music_corn.sources.plugins.dlf_plugin  # noqa: F401
 
 app = typer.Typer(name="music-corn", help="AI-powered personalized music discovery system")
 
