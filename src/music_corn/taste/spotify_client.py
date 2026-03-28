@@ -131,8 +131,8 @@ async def save_user_tokens(token_info: dict, email: str = "default") -> User:
         return user
 
 
-def get_authenticated_client(user: User) -> spotipy.Spotify:
-    """Get an authenticated Spotify client for a user, refreshing token if needed."""
+def _refresh_token_if_needed(user: User) -> dict:
+    """Check if token is expired and refresh if needed. Returns token_info dict."""
     oauth = _get_oauth_manager()
 
     token_info = {
@@ -146,12 +146,34 @@ def get_authenticated_client(user: User) -> spotipy.Spotify:
     if oauth.is_token_expired(token_info):
         logger.info("Refreshing Spotify token", user_id=str(user.id))
         token_info = oauth.refresh_access_token(token_info["refresh_token"])
-        # Update tokens in DB (fire and forget in sync context)
-        asyncio.get_event_loop().run_until_complete(
-            _update_tokens(user.id, token_info)
+        # Update user object in-memory
+        user.spotify_access_token = token_info["access_token"]
+        user.spotify_refresh_token = token_info.get("refresh_token", user.spotify_refresh_token)
+        user.spotify_token_expires_at = datetime.fromtimestamp(
+            token_info["expires_at"], tz=timezone.utc
         )
 
+    return token_info
+
+
+def get_authenticated_client(user: User) -> spotipy.Spotify:
+    """Get an authenticated Spotify client for a user, refreshing token if needed."""
+    token_info = _refresh_token_if_needed(user)
     return spotipy.Spotify(auth=token_info["access_token"])
+
+
+async def get_fresh_token(email: str = "default") -> str | None:
+    """Get a valid access token, refreshing if expired. Persists refreshed tokens to DB."""
+    async with async_session_factory() as session:
+        result = await session.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+        if not user or not user.spotify_access_token:
+            return None
+
+        token_info = _refresh_token_if_needed(user)
+        # Persist any refreshed tokens
+        await session.commit()
+        return token_info["access_token"]
 
 
 async def _update_tokens(user_id: uuid.UUID, token_info: dict):
