@@ -104,7 +104,7 @@ def _transcribe_audio(audio_path: str) -> str:
     file_size = os.path.getsize(audio_path)
     logger.info("Transcribing audio locally", size_mb=round(file_size / 1024 / 1024, 1))
 
-    model = WhisperModel("base", compute_type="int8")
+    model = WhisperModel("medium", compute_type="int8")
     segments, info = model.transcribe(audio_path, language="de", beam_size=5)
 
     logger.info("Detected language", language=info.language, probability=round(info.language_probability, 2))
