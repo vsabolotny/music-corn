@@ -261,6 +261,31 @@ def generate_podcast(
 
 
 @app.command()
+def run_weekly(
+    email: str = typer.Option("default", help="User email/identifier"),
+):
+    """Run the full weekly pipeline manually (taste + recommend + podcast)."""
+    from music_corn.pipeline.weekly import run_weekly_sync
+
+    typer.echo("Running full weekly pipeline...")
+    success = run_weekly_sync(email)
+    if success:
+        typer.echo("Weekly pipeline completed successfully.")
+    else:
+        typer.echo("Weekly pipeline failed. Check logs for details.")
+        raise typer.Exit(1)
+
+
+@app.command()
+def scheduler():
+    """Start the automated scheduler (long-running process)."""
+    from music_corn.pipeline.scheduler import start_scheduler
+
+    typer.echo("Starting music-corn scheduler...")
+    start_scheduler()
+
+
+@app.command()
 def migrate():
     """Run database migrations."""
     import subprocess
