@@ -201,7 +201,7 @@ async def promote_to_source(podcast_id: uuid.UUID | None = None, title: str | No
             source = await session.get(Source, podcast.promoted_source_id)
             return source
 
-        # Create source
+        # Create source first and flush to get it in the DB
         source = Source(
             id=uuid.uuid4(),
             name=podcast.title,
@@ -215,6 +215,7 @@ async def promote_to_source(podcast_id: uuid.UUID | None = None, title: str | No
             is_active=True,
         )
         session.add(source)
+        await session.flush()  # Persist source before setting FK
 
         # Link back
         podcast.promoted_source_id = source.id
