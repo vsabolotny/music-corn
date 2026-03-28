@@ -114,6 +114,43 @@ def resolve():
 
 
 @app.command()
+def auth(
+    email: str = typer.Option("default", help="User email/identifier"),
+):
+    """Connect your Spotify account via OAuth."""
+    from music_corn.taste.spotify_client import run_auth_flow, save_user_tokens
+
+    token_info = run_auth_flow()
+    user = asyncio.run(save_user_tokens(token_info, email))
+    typer.echo(f"Authenticated as user '{email}' (id: {user.id})")
+
+
+@app.command()
+def taste(
+    email: str = typer.Option("default", help="User email/identifier"),
+):
+    """Analyze your Spotify listening and compute a taste profile."""
+    from music_corn.taste.profiler import compute_taste_profile
+
+    profile = asyncio.run(compute_taste_profile(email))
+    if not profile:
+        typer.echo("Failed to compute taste profile. Run 'auth' first.")
+        raise typer.Exit(1)
+
+    typer.echo(f"\nTaste Profile (id: {profile.id})")
+    typer.echo(f"  Top genres: {', '.join(list(profile.top_genres.keys())[:10])}")
+    typer.echo(f"  Top artists: {', '.join(a['name'] for a in profile.top_artists[:10])}")
+    typer.echo(f"  Mood tags: {', '.join(profile.mood_tags or [])}")
+    typer.echo(f"  Era bias: {profile.listening_era_bias}")
+
+    audio = profile.audio_features_avg
+    if audio:
+        typer.echo(f"  Audio profile: energy={audio.get('energy', '?')}, "
+                    f"valence={audio.get('valence', '?')}, "
+                    f"danceability={audio.get('danceability', '?')}")
+
+
+@app.command()
 def migrate():
     """Run database migrations."""
     import subprocess
