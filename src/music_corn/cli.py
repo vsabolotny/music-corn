@@ -176,6 +176,91 @@ def recommend(
 
 
 @app.command()
+def generate_podcast(
+    email: str = typer.Option("default", help="User email/identifier"),
+):
+    """Generate an AI-narrated podcast from the latest weekly digest."""
+    import tempfile
+    from pathlib import Path
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select, desc
+    from music_corn.db.models import User, WeeklyDigest, TasteProfile
+    from music_corn.db.session import async_session_factory
+    from music_corn.podcast.script_writer import generate_script
+    from music_corn.podcast.tts import split_script, synthesize_segments
+    from music_corn.podcast.audio_assembler import assemble_podcast
+    from music_corn.taste.spotify_client import get_authenticated_client
+
+    async def _run():
+        async with async_session_factory() as session:
+            # Get user
+            result = await session.execute(select(User).where(User.email == email))
+            user = result.scalar_one_or_none()
+            if not user:
+                typer.echo("User not found. Run 'auth' first.")
+                raise typer.Exit(1)
+
+            # Get latest digest
+            result = await session.execute(
+                select(WeeklyDigest)
+                .where(WeeklyDigest.user_id == user.id)
+                .order_by(desc(WeeklyDigest.created_at))
+                .limit(1)
+            )
+            digest = result.scalar_one_or_none()
+            if not digest:
+                typer.echo("No digest found. Run 'recommend' first.")
+                raise typer.Exit(1)
+
+            # Get latest taste profile
+            result = await session.execute(
+                select(TasteProfile)
+                .where(TasteProfile.user_id == user.id)
+                .order_by(desc(TasteProfile.computed_at))
+                .limit(1)
+            )
+            profile = result.scalar_one_or_none()
+            if not profile:
+                typer.echo("No taste profile found. Run 'taste' first.")
+                raise typer.Exit(1)
+
+            # Step 1: Generate script
+            typer.echo("Generating podcast script...")
+            script = generate_script(digest, profile)
+            digest.podcast_script = script
+            typer.echo(f"Script generated ({len(script)} chars)")
+
+            # Step 2: TTS
+            typer.echo("Synthesizing speech...")
+            segments = split_script(script)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                work_dir = Path(tmpdir)
+                synthesized = synthesize_segments(segments, work_dir)
+
+                # Step 3: Assemble
+                typer.echo("Assembling podcast...")
+                sp = None
+                try:
+                    sp = get_authenticated_client(user)
+                except Exception:
+                    typer.echo("Warning: Could not connect to Spotify for previews.")
+
+                now = datetime.now(timezone.utc)
+                output_dir = Path(settings.podcast_output_dir)
+                output_path = output_dir / f"music-corn-{now.strftime('%Y-%m-%d')}.mp3"
+
+                assemble_podcast(synthesized, output_path, sp=sp)
+
+                digest.audio_file_path = str(output_path)
+                await session.commit()
+
+            typer.echo(f"\nPodcast ready: {output_path}")
+
+    asyncio.run(_run())
+
+
+@app.command()
 def migrate():
     """Run database migrations."""
     import subprocess
